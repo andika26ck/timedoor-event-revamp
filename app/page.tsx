@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, ArrowLeft, BookOpen, CalendarDays, Check, ChevronDown, FileSpreadsheet, LayoutDashboard, Plus, Search, Settings, Trash2, Upload, UserRound, UsersRound, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, BookOpen, CalendarDays, Check, ChevronDown, FileSpreadsheet, LayoutDashboard, MoreHorizontal, Plus, Search, Settings, Trash2, Upload, UserRound, UsersRound, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AttendanceRecord, EventRecord, EventSchedule, EventType, Participant, attendanceStarted, canReschedule, displayDate, ensureAttendance, eventTypeRules, initialEvents, scheduleStart, uid } from "./model";
 
@@ -113,7 +113,7 @@ function EventDetail({ event, allEvents, tab, setTab, onBack, onChange, onAttend
   event: EventRecord; allEvents: EventRecord[]; tab: Tab; setTab: (t: Tab) => void; onBack: () => void; onChange: (fn: (e: EventRecord) => EventRecord) => void;
   onAttendance: (id: string) => void; onReschedule: (id: string) => void; onMove: (id: string) => void; onImport: () => void;
 }) {
-  return <><Header title="Detail Event" subtitle={event.name} back={onBack} /><div className="tabs">{(["details", "participants", "attendance", "schedule"] as Tab[]).map((t) => <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>{t[0].toUpperCase() + t.slice(1)}</button>)}</div>
+  return <><Header title="Detail Event" subtitle={event.name} back={onBack} /><div className="tabs">{(["details", "participants", "schedule", "attendance"] as Tab[]).map((t) => <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>{t[0].toUpperCase() + t.slice(1)}</button>)}</div>
     {tab === "details" && <Details event={event} onChange={onChange} />}{tab === "schedule" && <Schedules event={event} allEvents={allEvents} onChange={onChange} onAttendance={onAttendance} onReschedule={onReschedule} />}
     {tab === "participants" && <Participants event={event} onChange={onChange} onMove={onMove} onImport={onImport} />}{tab === "attendance" && <AttendanceList event={event} onOpen={onAttendance} />}</>;
 }
@@ -145,11 +145,11 @@ function ScheduleEditor({ initial, label, onSubmit, onCancel }: { initial?: Sche
     <div><button className="btn primary" onClick={() => { const m = onSubmit(d); if (m) setError(m); }}>{label}</button><button className="text-action" onClick={onCancel}>Cancel</button></div>{error && <div className="notice warning schedule-error">{error}</div>}</div>;
 }
 function Schedules({ event, allEvents, onChange, onAttendance, onReschedule }: { event: EventRecord; allEvents: EventRecord[]; onChange: (fn: (e: EventRecord) => EventRecord) => void; onAttendance: (id: string) => void; onReschedule: (id: string) => void }) {
-  const [adding, setAdding] = useState(false); const full = eventTypeRules[event.type].singleSchedule && event.schedules.length >= 1;
+  const [adding, setAdding] = useState(false); const [actionId, setActionId] = useState(""); const full = eventTypeRules[event.type].singleSchedule && event.schedules.length >= 1;
   return <section className="card"><div className="card-head"><div><h2><CalendarDays size={19} /> Schedule</h2><p>Participants remain attached when schedules change.</p></div><button className="btn primary" disabled={full} onClick={() => setAdding(true)}><Plus size={16} /> Add Schedule</button></div>
     {adding && <ScheduleEditor label="Save Schedule" onCancel={() => setAdding(false)} onSubmit={(d) => { const m = validateSchedule(event, d, "", allEvents); if (m) return m; const id = uid("schedule"); onChange((e) => ({ ...e, schedules: [...e.schedules, { id, ...d }], participants: e.participants.map((p) => ({ ...p, attendance: { ...p.attendance, [id]: { presence: "Not Marked", lateMinutes: 0, journal: "", note: "" } } })) })); setAdding(false); }} />}
     <div className="table-wrap"><table><thead><tr><th>Date</th><th>Time</th><th>Teacher</th><th>Room</th><th>Status</th><th>Actions</th></tr></thead><tbody>{event.schedules.map((s) => { const locked = !canReschedule(event, s); return <tr key={s.id}><td>{displayDate(s.date)}</td><td>{s.startTime}–{s.endTime}</td><td>{s.teacher}</td><td>{s.room}</td><td><span className={`badge ${locked ? "warning" : "info"}`}>{attendanceStarted(event, s.id) ? "Attendance Started" : scheduleStart(s) <= new Date() ? "Finished" : locked ? "Starting Soon" : "Upcoming"}</span></td>
-      <td><div className="row-actions"><button className="text-action" onClick={() => onAttendance(s.id)}>View Attendance</button><button className="text-action" disabled={locked} onClick={() => onReschedule(s.id)}>Reschedule</button><button className="icon-btn danger-icon" title={event.active && event.schedules.length === 1 ? "An active event must keep at least one schedule." : "Cancel Schedule"} disabled={attendanceStarted(event, s.id) || (event.active && event.schedules.length === 1)} onClick={() => onChange((e) => ({ ...e, schedules: e.schedules.filter((x) => x.id !== s.id), participants: e.participants.map((p) => { const a = { ...p.attendance }; delete a[s.id]; return { ...p, attendance: a }; }) }))}><Trash2 size={15} /></button></div></td></tr>; })}
+      <td className="action-cell"><button className="icon-btn" onClick={() => setActionId(actionId === s.id ? "" : s.id)}><MoreHorizontal size={18} /></button>{actionId === s.id && <div className="dropdown"><button onClick={() => { setActionId(""); onAttendance(s.id); }}>View Attendance</button><button disabled={locked} onClick={() => { setActionId(""); onReschedule(s.id); }}>Reschedule</button><button className="danger-icon" disabled={attendanceStarted(event, s.id) || (event.active && event.schedules.length === 1)} onClick={() => { setActionId(""); onChange((e) => ({ ...e, schedules: e.schedules.filter((x) => x.id !== s.id), participants: e.participants.map((p) => { const a = { ...p.attendance }; delete a[s.id]; return { ...p, attendance: a }; }) })); }}>Cancel Schedule</button></div>}</td></tr>; })}
       {!event.schedules.length && <tr><td colSpan={6} className="empty-state">No schedules yet.</td></tr>}</tbody></table></div></section>;
 }
 
@@ -206,12 +206,12 @@ function Transfer({ source, participant, events, onClose, onConfirm }: { source:
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1); const [reason, setReason] = useState("Schedule conflict"); const [note, setNote] = useState("");
   const dest = eligible.find((e) => e.id === id); const delta = dest ? dest.price - originalPaid : 0;
   const destinationSchedule = dest?.schedules.filter((s) => scheduleStart(s) > new Date()).sort((a, b) => scheduleStart(a).getTime() - scheduleStart(b).getTime())[0];
-  if (step === 4 && dest) return <Modal onClose={onClose}><div className="success-view"><div className="success-icon"><Check /></div><h2>Participant successfully moved</h2><p>{participant.name} has been moved to {dest.name}.</p>
+  if (step === 4 && dest) return <Modal onClose={onClose}><div className="transfer-content"><div className="success-view"><div className="success-icon"><Check /></div><h2>Participant successfully moved</h2><p>{participant.name} has been moved to {dest.name}.</p>
     <div className="result-grid"><div><small>Destination Event</small><b>{dest.name}</b><small>New Schedule</small><b>{destinationSchedule ? `${displayDate(destinationSchedule.date)}, ${destinationSchedule.startTime}–${destinationSchedule.endTime}` : "—"}</b><small>Room</small><b>{destinationSchedule?.room || "—"}</b></div>
       <div><small>Price Adjustment</small><b>{delta > 0 ? `Additional Invoice ${money(delta)}` : delta < 0 ? `Balance Credit ${money(-delta)}` : "No price difference"}</b><small>Status</small><span className={`badge ${delta > 0 ? "warning" : "success"}`}>{delta > 0 ? "Pending Payment" : "Completed"}</span></div></div>
     <div className="notice success">{delta > 0 ? "The transfer is complete and an additional invoice was created." : delta < 0 ? "The transfer is complete and customer balance was added." : "The transfer is complete with no additional payment."}</div>
-    <button className="btn primary" onClick={onClose}>Back to Participants</button></div></Modal>;
-  return <Modal onClose={onClose}><div className="modal-head"><div><h2>Move Participant</h2><p>{step === 1 ? "Select a destination event." : step === 2 ? "Review the price adjustment." : "Review the participant transfer."}</p></div><button className="icon-btn" onClick={onClose}><X /></button></div>
+    <button className="btn primary" onClick={onClose}>Back to Participants</button></div></div></Modal>;
+  return <Modal onClose={onClose}><div className="transfer-content"><div className="modal-head"><div><h2>Move Participant</h2><p>{step === 1 ? "Select a destination event." : step === 2 ? "Review the price adjustment." : "Review the participant transfer."}</p></div><button className="icon-btn" onClick={onClose}><X /></button></div>
     <div className="stepper">{["Select Event", "Price Adjustment", "Review"].map((label, index) => <div key={label} className={`step ${step >= index + 1 ? "active" : ""}`}><span>{step > index + 1 ? <Check size={12} /> : index + 1}</span><b>{index + 1}. {label}</b></div>)}</div>
     <section className="read-card"><div className="compact-info"><div><small>Student</small><b>{participant.name}</b></div><div><small>Current Event</small><b>{source.name}</b></div><div><small>Amount Paid</small><b>{money(originalPaid)}</b></div><div><small>Payment</small><b>{participant.paymentStatus}</b></div></div></section>
     {!eligible.length ? <div className="notice warning">No eligible destination event is available.</div> : step === 1 ? <>
@@ -226,7 +226,7 @@ function Transfer({ source, participant, events, onClose, onConfirm }: { source:
         <div className="price-lines"><div><span>Destination Price</span><b>{money(dest.price)}</b></div><div><span>{delta > 0 ? "Additional Invoice" : delta < 0 ? "Balance Credit" : "Price Difference"}</span><b>{money(Math.abs(delta))}</b></div><div><span>Reason</span><b>{reason}</b></div></div>
         <label className="check-row"><input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} /> I reviewed the destination, quota, schedule, and payment adjustment.</label>
         <div className="modal-foot"><button className="btn outline" onClick={() => setStep(2)}>Back</button><button className="btn primary" disabled={!reviewed} onClick={() => { onConfirm(id); setStep(4); }}>{delta > 0 ? "Confirm Transfer & Create Invoice" : delta < 0 ? "Confirm Transfer & Add Balance" : "Confirm Transfer"}</button></div></> : null}
-  </Modal>;
+  </div></Modal>;
 }
 function transferParticipant(events: EventRecord[], setEvents: React.Dispatch<React.SetStateAction<EventRecord[]>>, sourceId: string, destId: string, participantId: string) {
   const source = events.find((e) => e.id === sourceId)!, dest = events.find((e) => e.id === destId)!, p = source.participants.find((x) => x.id === participantId)!, delta = dest.price - p.amountPaid;
