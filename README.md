@@ -20,8 +20,10 @@ flows use in-memory state, so they can be exercised without a backend:
 - Block reschedule when attendance has started or the cutoff has passed
 - Transfer a participant with equal, higher, or lower destination pricing
 
-Data resets when the page is refreshed. API, database, authentication, and
-production authorization rules are intentionally outside this standalone demo.
+Demo data is persisted in browser `localStorage`, including created events,
+schedules, and participant transfers. API, shared database, authentication, and
+production authorization rules are intentionally outside this standalone demo;
+data is therefore scoped to one browser/device.
 
 ## Local development
 

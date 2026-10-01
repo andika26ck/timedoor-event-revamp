@@ -23,7 +23,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Screen = "events" | "detail" | "create" | "attendance";
 type DetailTab = "details" | "participants" | "attendance" | "schedule";
@@ -42,10 +42,33 @@ type EventSchedule = {
   attendanceStarted: boolean;
 };
 
-const initialSchedules: EventSchedule[] = [
+type Participant = {
+  name: string;
+  id: string;
+  parent: string;
+  payment: string;
+  amount: string;
+};
+
+const digitalSchedules: EventSchedule[] = [
   { date: "28 Sep 2026", isoDate: "2026-09-28", startTime: "13:00", endTime: "15:00", teacher: "Nimas Sekararum Kinanthi", room: "Bill Gates Room", locked: true, attendanceStarted: true },
   { date: "5 Oct 2026", isoDate: "2026-10-05", startTime: "13:00", endTime: "15:00", teacher: "Nimas Sekararum Kinanthi", room: "Bill Gates Room", locked: false, attendanceStarted: false },
   { date: "12 Oct 2026", isoDate: "2026-10-12", startTime: "13:00", endTime: "15:00", teacher: "Budi Wicaksono", room: "Steve Jobs Room", locked: false, attendanceStarted: false },
+];
+
+const initialSchedulesByEvent: Record<string, EventSchedule[]> = {
+  "Digital Literacy Workshop": digitalSchedules,
+  "Trial Robotics": [digitalSchedules[1]],
+  "Holiday Coding Bootcamp": [digitalSchedules[1], digitalSchedules[2]],
+  "PTM Grade 5": [digitalSchedules[2]],
+  "Monthly Teacher Meeting": [digitalSchedules[1], digitalSchedules[2]],
+  "Trial Class — FREE": [digitalSchedules[0]],
+};
+
+const initialParticipants: Participant[] = [
+  { name: "Axel Mikhail Ahmad", id: "STD-20260818-4080", parent: "Axel Mikhail", payment: "Paid", amount: "IDR 350,000" },
+  { name: "Bella Natasha Putri", id: "STD-20260818-4081", parent: "Sari Indah", payment: "Paid", amount: "IDR 350,000" },
+  { name: "Kevin Pratama", id: "STD-20260818-4082", parent: "Rina Pratama", payment: "Pending", amount: "IDR 350,000" },
 ];
 
 const destinationEvents = [
@@ -73,6 +96,7 @@ function displayDate(value: string) {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("events");
+  const [selectedEventName, setSelectedEventName] = useState("Digital Literacy Workshop");
   const [detailTab, setDetailTab] = useState<DetailTab>("schedule");
   const [rescheduleStep, setRescheduleStep] = useState<0 | 1 | 2 | 3>(0);
   const [actionMenu, setActionMenu] = useState<number | null>(null);
@@ -81,16 +105,38 @@ export default function App() {
   const [reviewed, setReviewed] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [eventType, setEventType] = useState<EventType>("Workshop");
-  const [eventSchedules, setEventSchedules] = useState<EventSchedule[]>(initialSchedules);
+  const [schedulesByEvent, setSchedulesByEvent] = useState<Record<string, EventSchedule[]>>(initialSchedulesByEvent);
   const [rescheduleIndex, setRescheduleIndex] = useState<number | null>(null);
   const [eventRows, setEventRows] = useState(initialEventRows);
+  const [participants, setParticipants] = useState<Participant[]>(initialParticipants);
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("timedoor-event-revamp-state");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed.eventRows)) setEventRows(parsed.eventRows);
+        if (parsed.schedulesByEvent) setSchedulesByEvent(parsed.schedulesByEvent);
+        if (Array.isArray(parsed.participants)) setParticipants(parsed.participants);
+      }
+    } finally {
+      hydrated.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    localStorage.setItem("timedoor-event-revamp-state", JSON.stringify({ eventRows, schedulesByEvent, participants }));
+  }, [eventRows, schedulesByEvent, participants]);
 
   const destination = useMemo(
     () => destinationEvents.find((e) => e.id === priceCase)!,
     [priceCase],
   );
 
-  function openDetail(tab: DetailTab = "schedule") {
+  function openDetail(tab: DetailTab = "schedule", eventName = selectedEventName) {
+    setSelectedEventName(eventName);
     setScreen("detail");
     setDetailTab(tab);
     setActionMenu(null);
@@ -106,7 +152,7 @@ export default function App() {
             <EventsPage
               rows={eventRows}
               onCreate={() => setScreen("create")}
-              onOpen={() => openDetail("schedule")}
+              onOpen={(name) => openDetail("schedule", name)}
             />
           )}
           {screen === "detail" && (
@@ -114,19 +160,17 @@ export default function App() {
               tab={detailTab}
               setTab={setDetailTab}
               onBack={() => setScreen("events")}
+              eventName={selectedEventName}
+              eventType={(eventRows.find((row) => row[0] === selectedEventName)?.[1] ?? "Workshop") as EventType}
               actionMenu={actionMenu}
               setActionMenu={setActionMenu}
-              schedules={eventSchedules}
-              onAddSchedule={() => setEventSchedules((current) => [...current, {
-                date: "2 Nov 2026",
-                isoDate: "2026-11-02",
-                startTime: "13:00",
-                endTime: "15:00",
-                teacher: "Nimas Sekararum Kinanthi",
-                room: "Bill Gates Room",
-                locked: false,
-                attendanceStarted: false,
-              }])}
+              schedules={schedulesByEvent[selectedEventName] ?? []}
+              participants={participants}
+              onAddParticipant={(participant) => setParticipants((current) => [...current, participant])}
+              onAddSchedule={(schedule) => setSchedulesByEvent((current) => ({
+                ...current,
+                [selectedEventName]: [...(current[selectedEventName] ?? []), schedule],
+              }))}
               onReschedule={(index) => {
                 setRescheduleIndex(index);
                 setRescheduleStep(1);
@@ -144,8 +188,9 @@ export default function App() {
               eventType={eventType}
               setEventType={setEventType}
               onBack={() => setScreen("events")}
-              onSave={(row) => {
+              onSave={(row, schedules) => {
                 setEventRows((current) => [row, ...current]);
+                setSchedulesByEvent((current) => ({ ...current, [row[0]]: schedules }));
                 setScreen("events");
               }}
             />
@@ -158,10 +203,13 @@ export default function App() {
         <RescheduleModal
           step={rescheduleStep}
           setStep={setRescheduleStep}
-          schedule={rescheduleIndex === null ? null : eventSchedules[rescheduleIndex]}
+          schedule={rescheduleIndex === null ? null : schedulesByEvent[selectedEventName]?.[rescheduleIndex] ?? null}
           onConfirm={(updated) => {
             if (rescheduleIndex !== null) {
-              setEventSchedules((current) => current.map((item, index) => index === rescheduleIndex ? updated : item));
+              setSchedulesByEvent((current) => ({
+                ...current,
+                [selectedEventName]: (current[selectedEventName] ?? []).map((item, index) => index === rescheduleIndex ? updated : item),
+              }));
             }
           }}
         />
@@ -175,6 +223,7 @@ export default function App() {
           destination={destination}
           reviewed={reviewed}
           setReviewed={setReviewed}
+          onTransferred={() => setParticipants((current) => current.filter((participant) => participant.id !== "STD-20260818-4080"))}
         />
       )}
       {importOpen && <ImportModal onClose={() => setImportOpen(false)} />}
@@ -259,7 +308,17 @@ function PageHeader({
   );
 }
 
-function EventsPage({ rows, onCreate, onOpen }: { rows: string[][]; onCreate: () => void; onOpen: () => void }) {
+function EventsPage({ rows, onCreate, onOpen }: { rows: string[][]; onCreate: () => void; onOpen: (name: string) => void }) {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [sortOrder, setSortOrder] = useState("newest");
+  const visibleRows = useMemo(() => {
+    const filtered = rows.filter((row) =>
+      row[0].toLowerCase().includes(search.toLowerCase()) &&
+      (!typeFilter || row[1] === typeFilter),
+    );
+    return sortOrder === "name" ? [...filtered].sort((a, b) => a[0].localeCompare(b[0])) : filtered;
+  }, [rows, search, typeFilter, sortOrder]);
   return (
     <>
       <PageHeader
@@ -269,26 +328,26 @@ function EventsPage({ rows, onCreate, onOpen }: { rows: string[][]; onCreate: ()
       />
       <section className="card list-card">
         <div className="filters">
-          <div className="search"><Search size={16} /><input placeholder="Search Event" /></div>
-          <select><option>Select Event Type</option></select>
-          <select><option>Newest</option></select>
-          <button className="text-action">Reset Filter</button>
+          <div className="search"><Search size={16} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Event" /></div>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="">Select Event Type</option><option>Workshop</option><option>Trial</option><option>Bootcamp</option><option>PTM</option><option>Internal Meeting</option></select>
+          <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}><option value="newest">Newest</option><option value="name">Name A–Z</option></select>
+          <button className="text-action" onClick={() => { setSearch(""); setTypeFilter(""); setSortOrder("newest"); }}>Reset Filter</button>
         </div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>Event Name</th><th>Event Type</th><th>Schedule</th><th>Participants</th><th>Price</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
-              {rows.map((r) => {
-                const hasPrototypeDetail = r[0] === "Digital Literacy Workshop";
+              {visibleRows.map((r) => {
                 return (
-                <tr key={r[0]} onClick={hasPrototypeDetail ? onOpen : undefined} className={hasPrototypeDetail ? "clickable" : ""}>
-                  <td className={hasPrototypeDetail ? "green-link" : ""}>{r[0]}</td>
+                <tr key={r[0]} onClick={() => onOpen(r[0])} className="clickable">
+                  <td className="green-link">{r[0]}</td>
                   <td><span className="type-badge">{r[1]}</span></td>
                   <td>{r[2]}</td><td>{r[3]} participants</td><td>{r[4]}</td>
                   <td><span className={`badge ${r[5] === "Active" ? "success" : "neutral"}`}>{r[5]}</span></td>
                   <td><button className="icon-btn"><MoreHorizontal size={18} /></button></td>
                 </tr>
               )})}
+              {visibleRows.length === 0 && <tr><td colSpan={7} className="empty-state">No events match the current filters.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -299,15 +358,19 @@ function EventsPage({ rows, onCreate, onOpen }: { rows: string[][]; onCreate: ()
 }
 
 function DetailPage({
-  tab, setTab, onBack, actionMenu, setActionMenu, schedules, onAddSchedule, onReschedule, onAttendance, onMove, onImport,
+  tab, setTab, onBack, eventName, eventType, actionMenu, setActionMenu, schedules, participants, onAddParticipant, onAddSchedule, onReschedule, onAttendance, onMove, onImport,
 }: {
   tab: DetailTab;
   setTab: (t: DetailTab) => void;
   onBack: () => void;
+  eventName: string;
+  eventType: EventType;
   actionMenu: number | null;
   setActionMenu: (n: number | null) => void;
   schedules: EventSchedule[];
-  onAddSchedule: () => void;
+  participants: Participant[];
+  onAddParticipant: (participant: Participant) => void;
+  onAddSchedule: (schedule: EventSchedule) => void;
   onReschedule: (index: number) => void;
   onAttendance: () => void;
   onMove: () => void;
@@ -315,38 +378,57 @@ function DetailPage({
 }) {
   return (
     <>
-      <PageHeader title="Detail Event" subtitle="Digital Literacy Workshop" back={onBack} />
+      <PageHeader title="Detail Event" subtitle={eventName} back={onBack} />
       <div className="tabs">
         {(["details", "participants", "attendance", "schedule"] as DetailTab[]).map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>{t[0].toUpperCase() + t.slice(1)}</button>
         ))}
       </div>
       {tab === "schedule" && (
-        <ScheduleTab schedules={schedules} actionMenu={actionMenu} setActionMenu={setActionMenu} onAddSchedule={onAddSchedule} onReschedule={onReschedule} onAttendance={onAttendance} />
+        <ScheduleTab eventType={eventType} schedules={schedules} actionMenu={actionMenu} setActionMenu={setActionMenu} onAddSchedule={onAddSchedule} onReschedule={onReschedule} onAttendance={onAttendance} />
       )}
-      {tab === "participants" && <ParticipantsTab onMove={onMove} onImport={onImport} />}
+      {tab === "participants" && <ParticipantsTab participants={participants} onAddParticipant={onAddParticipant} onMove={onMove} onImport={onImport} />}
       {tab === "attendance" && <AttendanceList onOpen={onAttendance} />}
-      {tab === "details" && <DetailsTab />}
+      {tab === "details" && <DetailsTab eventName={eventName} eventType={eventType} />}
     </>
   );
 }
 
 function ScheduleTab({
-  schedules, actionMenu, setActionMenu, onAddSchedule, onReschedule, onAttendance,
+  eventType, schedules, actionMenu, setActionMenu, onAddSchedule, onReschedule, onAttendance,
 }: {
+  eventType: EventType;
   schedules: EventSchedule[];
   actionMenu: number | null;
   setActionMenu: (n: number | null) => void;
-  onAddSchedule: () => void;
+  onAddSchedule: (schedule: EventSchedule) => void;
   onReschedule: (index: number) => void;
   onAttendance: () => void;
 }) {
+  const [adding, setAdding] = useState(false);
+  const [date, setDate] = useState("2026-11-02");
+  const [startTime, setStartTime] = useState("13:00");
+  const [endTime, setEndTime] = useState("15:00");
+  const [teacher, setTeacher] = useState("Nimas Sekararum Kinanthi");
+  const [room, setRoom] = useState("Bill Gates Room");
+  const [error, setError] = useState("");
+  const single = eventType === "Trial" || eventType === "PTM";
+  function addSchedule() {
+    if (single && schedules.length >= 1) return setError(`${eventType} supports one schedule only.`);
+    if (endTime <= startTime) return setError("End time must be later than start time.");
+    if (schedules.some((item) => item.isoDate === date && item.startTime === startTime && item.endTime === endTime && item.room === room)) return setError("This schedule already exists.");
+    onAddSchedule({ date: displayDate(date), isoDate: date, startTime, endTime, teacher, room, locked: false, attendanceStarted: false });
+    setAdding(false);
+    setError("");
+  }
   return (
     <section className="card">
       <div className="card-head">
         <div><h2><CalendarDays size={19} /> Schedule</h2><p>Manage dates, teachers, and rooms for this event.</p></div>
-        <div className="head-actions"><small>Workshop supports multiple schedules.</small><button className="btn primary" onClick={onAddSchedule}><Plus size={16} /> Add Schedule</button></div>
+        <div className="head-actions"><small>{single ? `${eventType} supports one schedule only.` : `${eventType} supports multiple schedules.`}</small><button className="btn primary" disabled={single && schedules.length >= 1} onClick={() => setAdding((value) => !value)}><Plus size={16} /> Add Schedule</button></div>
       </div>
+      {adding && <div className="schedule-editor"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /><input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} /><input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} /><select value={teacher} onChange={(e) => setTeacher(e.target.value)}><option>Nimas Sekararum Kinanthi</option><option>Budi Wicaksono</option></select><select value={room} onChange={(e) => setRoom(e.target.value)}><option>Bill Gates Room</option><option>Steve Jobs Room</option><option>Jeff Bezos Room</option></select><button className="btn primary" onClick={addSchedule}>Save Schedule</button></div>}
+      {error && <div className="notice warning">{error}</div>}
       <table>
         <thead><tr><th>Date</th><th>Time</th><th>Main Teacher</th><th>Room</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>
@@ -376,33 +458,47 @@ function ScheduleTab({
   );
 }
 
-function ParticipantsTab({ onMove, onImport }: { onMove: () => void; onImport: () => void }) {
-  const students = [
-    ["Axel Mikhail Ahmad", "STD-20260818-4080", "Axel Mikhail", "Paid", "IDR 350,000"],
-    ["Bella Natasha Putri", "STD-20260818-4081", "Sari Indah", "Paid", "IDR 350,000"],
-    ["Kevin Pratama", "STD-20260818-4082", "Rina Pratama", "Pending", "IDR 350,000"],
-  ];
+function ParticipantsTab({ participants, onAddParticipant, onMove, onImport }: { participants: Participant[]; onAddParticipant: (participant: Participant) => void; onMove: () => void; onImport: () => void }) {
+  const [search, setSearch] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [parent, setParent] = useState("");
+  const filtered = participants.filter((participant) => participant.name.toLowerCase().includes(search.toLowerCase()));
+  function addParticipant() {
+    if (!name.trim() || !parent.trim()) return;
+    onAddParticipant({
+      name: name.trim(),
+      parent: parent.trim(),
+      id: `STD-${Date.now()}`,
+      payment: "Pending",
+      amount: "IDR 350,000",
+    });
+    setName("");
+    setParent("");
+    setAdding(false);
+  }
   return (
     <>
       <div className="summary-grid three">
         <Summary title="Room Name" value="Bill Gates Room" icon={<BookOpen size={18} />} />
-        <Summary title="Total Student" value="24" icon={<UsersRound size={18} />} />
+        <Summary title="Total Student" value={String(participants.length)} icon={<UsersRound size={18} />} />
         <Summary title="Total Teacher" value="1" icon={<UserRound size={18} />} />
       </div>
       <section className="card">
         <div className="card-head">
-          <div><h2>Student List <span className="mini-count">24 Students</span></h2></div>
+          <div><h2>Student List <span className="mini-count">{participants.length} Students</span></h2></div>
           <div className="head-actions">
             <button className="btn outline" onClick={onImport}><Upload size={15} /> Import Participants</button>
-            <button className="btn outline"><Plus size={15} /> Add Student</button>
+            <button className="btn outline" onClick={() => setAdding((value) => !value)}><Plus size={15} /> Add Student</button>
           </div>
         </div>
-        <div className="filters compact"><div className="search"><Search size={15} /><input placeholder="Search Student" /></div><select><option>All Status</option></select></div>
+        {adding && <div className="participant-editor"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Student name" /><input value={parent} onChange={(e) => setParent(e.target.value)} placeholder="Parent name" /><button className="btn primary" disabled={!name.trim() || !parent.trim()} onClick={addParticipant}>Add Participant</button></div>}
+        <div className="filters compact"><div className="search"><Search size={15} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Student" /></div><select><option>All Status</option><option>Paid</option><option>Pending</option></select></div>
         <table>
           <thead><tr><th>Student</th><th>Parent</th><th>Payment</th><th>Amount Paid</th><th>Action</th></tr></thead>
-          <tbody>{students.map((s, i) => <tr key={s[1]}><td><b>{s[0]}</b><small>{s[1]}</small></td><td>{s[2]}</td><td><span className={`badge ${s[3] === "Paid" ? "success" : "warning"}`}>{s[3]}</span></td><td>{s[4]}</td><td>{i === 0 ? <button className="text-action" onClick={onMove}>Move to Another Event</button> : <button className="icon-btn"><MoreHorizontal size={17} /></button>}</td></tr>)}</tbody>
+          <tbody>{filtered.map((participant) => <tr key={participant.id}><td><b>{participant.name}</b><small>{participant.id}</small></td><td>{participant.parent}</td><td><span className={`badge ${participant.payment === "Paid" ? "success" : "warning"}`}>{participant.payment}</span></td><td>{participant.amount}</td><td>{participant.id === "STD-20260818-4080" ? <button className="text-action" onClick={onMove}>Move to Another Event</button> : <button className="icon-btn"><MoreHorizontal size={17} /></button>}</td></tr>)}</tbody>
         </table>
-        <TableFooter total="1–3 of 24" />
+        <TableFooter total={participants.length ? `1–${filtered.length} of ${participants.length}` : "0 of 0"} />
       </section>
     </>
   );
@@ -420,10 +516,10 @@ function AttendanceList({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-function DetailsTab() {
+function DetailsTab({ eventName, eventType }: { eventName: string; eventType: EventType }) {
   return (
     <div className="detail-grid">
-      <section className="card"><div className="card-head"><h2>Basic Information</h2></div>{["Product ID|EV-280926-882","Branch Availability|HQ Training","Event Name|Digital Literacy Workshop","Event Type|Workshop","Base Price|IDR 350,000"].map(x => { const [a,b]=x.split("|"); return <div className="detail-row" key={a}><span>{a}</span><b>{b}</b></div>; })}</section>
+      <section className="card"><div className="card-head"><h2>Basic Information</h2></div>{[`Product ID|EV-${eventName.length}0926`,`Branch Availability|HQ Training`,`Event Name|${eventName}`,`Event Type|${eventType}`,"Base Price|IDR 350,000"].map(x => { const [a,b]=x.split("|"); return <div className="detail-row" key={a}><span>{a}</span><b>{b}</b></div>; })}</section>
       <section className="card"><div className="card-head"><h2>Settings</h2></div><span className="badge success">Active</span><p className="muted">Created at<br />24 Sep 2026</p></section>
     </div>
   );
@@ -438,7 +534,7 @@ function CreateEventPage({
   eventType: EventType;
   setEventType: (e: EventType) => void;
   onBack: () => void;
-  onSave: (row: string[]) => void;
+  onSave: (row: string[], schedules: EventSchedule[]) => void;
 }) {
   const single = eventType === "Trial" || eventType === "PTM";
   const internal = eventType === "Internal Meeting";
@@ -451,6 +547,7 @@ function CreateEventPage({
   const [createdSchedules, setCreatedSchedules] = useState([
     { date: "2026-10-05", start: "13:00", end: "15:00", room: "Bill Gates Room" },
   ]);
+  const [scheduleError, setScheduleError] = useState("");
   const placeholder: Record<EventType, string> = {
     Workshop: "Workshop Name: Date or Session",
     Trial: "Trial Date — Trial Session/Time",
@@ -460,16 +557,30 @@ function CreateEventPage({
   };
   const price = internal ? "—" : free ? "Free" : eventType === "Bootcamp" ? "IDR 1,500,000" : eventType === "Trial" ? "IDR 150,000" : "IDR 350,000";
   function addSchedule() {
-    if (!draftDate || !draftStart || !draftEnd || !draftRoom || draftEnd <= draftStart) return;
-    if (single && createdSchedules.length >= 1) return;
+    if (!draftDate || !draftStart || !draftEnd || !draftRoom || draftEnd <= draftStart) return setScheduleError("Enter a valid date and time range.");
+    if (single && createdSchedules.length >= 1) return setScheduleError(`${eventType} supports one schedule only.`);
+    if (createdSchedules.some((schedule) => schedule.date === draftDate && schedule.start === draftStart && schedule.end === draftEnd && schedule.room === draftRoom)) return setScheduleError("This schedule already exists.");
     setCreatedSchedules((current) => [...current, { date: draftDate, start: draftStart, end: draftEnd, room: draftRoom }]);
+    setScheduleError("");
   }
   function saveEvent() {
     if (!eventName.trim() || createdSchedules.length === 0) return;
     const scheduleLabel = createdSchedules.length === 1
       ? `${createdSchedules[0].date}, ${createdSchedules[0].start}`
       : `${createdSchedules.length} schedules`;
-    onSave([eventName.trim(), eventType, scheduleLabel, "0", price, "Active"]);
+    onSave(
+      [eventName.trim(), eventType, scheduleLabel, "0", price, "Active"],
+      createdSchedules.map((schedule) => ({
+        date: displayDate(schedule.date),
+        isoDate: schedule.date,
+        startTime: schedule.start,
+        endTime: schedule.end,
+        teacher: "Nimas Sekararum Kinanthi",
+        room: schedule.room,
+        locked: false,
+        attendanceStarted: false,
+      })),
+    );
   }
   return (
     <>
@@ -500,6 +611,7 @@ function CreateEventPage({
             <div className="card-head"><h2><CalendarDays size={18} /> Schedule</h2><small>{single ? `${eventType} supports one schedule only.` : `${eventType} supports multiple schedules.`}</small></div>
             <div className="notice blue"><AlertCircle size={17} /> Please select each day to set schedule, using Asia/Jakarta timezone.</div>
             {(!single || createdSchedules.length === 0) && <div className="schedule-fields"><input type="date" value={draftDate} onChange={(e) => setDraftDate(e.target.value)} /><input type="time" value={draftStart} onChange={(e) => setDraftStart(e.target.value)} /><input type="time" value={draftEnd} onChange={(e) => setDraftEnd(e.target.value)} /><select value={draftRoom} onChange={(e) => setDraftRoom(e.target.value)}><option>Bill Gates Room</option><option>Steve Jobs Room</option><option>Jeff Bezos Room</option></select><button className="btn primary" disabled={draftEnd <= draftStart} onClick={addSchedule}><Plus size={15} /> Add</button></div>}
+            {scheduleError && <div className="notice warning">{scheduleError}</div>}
             {single && createdSchedules.length > 0 && <p className="muted">{eventType} allows one schedule. Remove the existing schedule to add a different one.</p>}
             <h3>Added Schedule{single ? "" : "s"}</h3>
             <table><thead><tr><th>Date</th><th>Time</th><th>Room</th><th>Action</th></tr></thead><tbody>
@@ -560,7 +672,8 @@ function RescheduleModal({
   const [reason, setReason] = useState("");
   if (step === 0) return null;
   if (!schedule) return null;
-  const invalidSchedule = !newDate || !newStart || !newEnd || newEnd <= newStart || !reason.trim();
+  const unchanged = newDate === schedule.isoDate && newStart === schedule.startTime && newEnd === schedule.endTime && newRoom === schedule.room && newTeacher === schedule.teacher;
+  const invalidSchedule = !newDate || !newStart || !newEnd || newEnd <= newStart || !reason.trim() || unchanged;
   if (step === 3) {
     return <Modal onClose={() => setStep(0)}><div className="success-view"><div className="success-icon"><Check /></div><h2>Event successfully rescheduled</h2><p>24 participants will follow the new schedule.</p><button className="btn primary" onClick={() => setStep(0)}>Back to Schedule</button></div></Modal>;
   }
@@ -577,6 +690,7 @@ function RescheduleModal({
           <label>Main Teacher<select value={newTeacher} onChange={(e) => setNewTeacher(e.target.value)}><option>Nimas Sekararum Kinanthi</option><option>Budi Wicaksono</option></select></label>
           <label>Reason for Reschedule<textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Tutor unavailable" /></label>
           {newEnd <= newStart && <div className="notice warning">End time must be later than start time.</div>}
+          {unchanged && reason.trim() && <div className="notice warning">Change at least one schedule field before continuing.</div>}
           <div className="modal-foot"><button className="btn outline" onClick={() => setStep(0)}>Cancel</button><button className="btn primary" disabled={invalidSchedule} onClick={() => setStep(2)}>Continue</button></div>
         </>
       ) : (
@@ -605,7 +719,7 @@ function RescheduleModal({
 }
 
 function TransferFlow({
-  step, setStep, priceCase, setPriceCase, destination, reviewed, setReviewed,
+  step, setStep, priceCase, setPriceCase, destination, reviewed, setReviewed, onTransferred,
 }: {
   step: TransferStep;
   setStep: (s: TransferStep) => void;
@@ -614,6 +728,7 @@ function TransferFlow({
   destination: (typeof destinationEvents)[number];
   reviewed: boolean;
   setReviewed: (v: boolean) => void;
+  onTransferred: () => void;
 }) {
   const delta = destination.price - 350000;
   if (step === 4) {
@@ -637,7 +752,7 @@ function TransferFlow({
           </section>
         )}
         {step === 2 && <PriceAdjustment destination={destination} delta={delta} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
-        {step === 3 && <TransferReview destination={destination} delta={delta} reviewed={reviewed} setReviewed={setReviewed} onBack={() => setStep(2)} onConfirm={() => setStep(4)} />}
+        {step === 3 && <TransferReview destination={destination} delta={delta} reviewed={reviewed} setReviewed={setReviewed} onBack={() => setStep(2)} onConfirm={() => { onTransferred(); setStep(4); }} />}
       </div>
     </div>
   );
