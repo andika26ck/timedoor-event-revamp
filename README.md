@@ -1,7 +1,8 @@
 # Timedoor Event Revamp Prototype
 
-Standalone Next.js prototype covering the confirmed internship scope. Core demo
-flows use in-memory state, so they can be exercised without a backend:
+Standalone Next.js prototype covering the confirmed internship scope. The demo
+uses one normalized event model and browser persistence so every core flow can
+be exercised without a backend:
 
 - Event list and Event Detail tabs
 - Schedule management and proposed reschedule cutoff state
@@ -11,6 +12,10 @@ flows use in-memory state, so they can be exercised without a backend:
 - Attendance Detail
 - Create Event rules for Workshop, Trial, Bootcamp, PTM, and Internal Meeting
 - Initial spreadsheet import state (format pending)
+- Working CSV participant import (`name,parent,amountPaid`)
+- Editable attendance, lateness, notes, and Meeting Journal
+- Dynamic destination eligibility, quota checks, and duplicate prevention
+- Persisted invoice/balance entries created by participant transfers
 
 ## Implemented demo interactions
 
@@ -20,10 +25,10 @@ flows use in-memory state, so they can be exercised without a backend:
 - Block reschedule when attendance has started or the cutoff has passed
 - Transfer a participant with equal, higher, or lower destination pricing
 
-Demo data is persisted in browser `localStorage`, including created events,
-schedules, and participant transfers. API, shared database, authentication, and
-production authorization rules are intentionally outside this standalone demo;
-data is therefore scoped to one browser/device.
+Demo data is persisted in browser `localStorage`, including events, schedules,
+participants, attendance, transfers, invoices, and balance credits. API, shared
+database, authentication, and production authorization rules are intentionally
+outside this standalone demo; data is therefore scoped to one browser/device.
 
 ## Local development
 
