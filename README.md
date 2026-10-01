@@ -16,6 +16,10 @@ be exercised without a backend:
 - Editable attendance, lateness, notes, and Meeting Journal
 - Dynamic destination eligibility, quota checks, and duplicate prevention
 - Persisted invoice/balance entries created by participant transfers
+- Figma-aligned two-step reschedule review
+- Figma-aligned three-step participant transfer and success states
+- Cross-event room/teacher schedule conflict validation
+- Future-date validation and protection against active events with zero schedules
 
 ## Implemented demo interactions
 

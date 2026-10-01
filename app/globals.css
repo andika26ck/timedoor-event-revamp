@@ -125,6 +125,7 @@ tr.clickable:hover { background: #fbfefb; }
 .empty-state { text-align: center; color: var(--muted); padding: 32px; }
 .row-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .csv-area { min-height: 180px; font-family: "Courier New", monospace; }
+.hidden-file-input { display: none; }
 .schedule-create h3 { font-size: 14px; margin: 18px 0 8px; }
 .danger-icon { color: var(--danger); }
 .settings-card { align-self: start; }
@@ -194,6 +195,8 @@ tr.clickable:hover { background: #fbfefb; }
   .content { padding: 18px; overflow-x: hidden; }
   .page-header { align-items: flex-start; gap: 12px; }
   .page-header .header-actions { flex-shrink: 0; }
+  .page-header { flex-wrap: wrap; }
+  .page-header .header-actions { width: 100%; flex-wrap: wrap; }
   .create-grid, .detail-grid, .review-columns { grid-template-columns: 1fr; }
   .summary-grid.three, .compact-info { grid-template-columns: 1fr; }
   .compact-info > div { border-right: 0; border-bottom: 1px solid var(--divider); }
